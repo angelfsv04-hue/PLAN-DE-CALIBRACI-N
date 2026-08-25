@@ -27,6 +27,7 @@
     --radius: 12px;
     --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -45,6 +46,7 @@
       --info:#8fa8ec; --info-bg:#161f34; --info-border:#2b3a5c;
       --muted:#8ca39d; --muted-bg:#182420; --muted-border:#2a3934;
       --shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 10px rgba(0,0,0,.4);
+      color-scheme: dark;
     }
   }
   :root[data-theme="dark"]{
@@ -88,7 +90,7 @@
     display:flex;align-items:center;justify-content:center;
   }
   .brand .mark svg{width:26px;height:26px;}
-  .brand .eyebrow{
+  .eyebrow{
     font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.08em;
     text-transform:uppercase;color:var(--accent);margin:0 0 3px;
   }
@@ -133,11 +135,13 @@
   }
   .field{display:flex;flex-direction:column;gap:5px;}
   .field label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
-  .field input[type="text"], .field select{
+  .field input[type="text"], .field input[type="password"], .field select{
     background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
     padding:8px 10px;color:var(--text);font-size:13.5px;min-width:150px;font-family:var(--font-ui);
+    color-scheme:light dark;
   }
   .field input[type="text"]{min-width:230px;font-family:var(--font-mono);}
+  .login-card .field input{min-width:0;width:100%;}
   .field input:focus, .field select:focus{outline:2px solid var(--accent);outline-offset:-1px;}
   .btn{
     background:var(--accent);color:#06201d;border:none;border-radius:8px;padding:9px 14px;
@@ -191,10 +195,53 @@
     .filters, .stats{display:none;}
     body{background:#fff;color:#000;}
   }
+
+  .login-gate{
+    position:fixed;inset:0;background:var(--bg);z-index:100;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .login-card{
+    width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 26px 24px;text-align:center;
+  }
+  .login-card .mark{margin:0 auto 14px;}
+  .login-card h2{font-size:19px;margin:2px 0 4px;font-weight:700;letter-spacing:-.01em;}
+  .login-sub{color:var(--text-muted);font-size:13px;margin:0 0 20px;}
+  .login-card .field{text-align:left;margin-bottom:12px;}
+  .login-card input{width:100%;font-family:var(--font-mono);}
+  .login-card .btn{width:100%;margin-top:6px;padding:10px 14px;}
+  .login-error{color:var(--danger);font-size:12.5px;margin:12px 0 0;display:none;}
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div class="login-gate" id="loginGate">
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" style="color:var(--text-muted)"/>
+        <path d="M12 12 L16.2 8.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color:var(--accent)"/>
+        <circle cx="12" cy="12" r="1.4" fill="var(--accent)"/>
+        <path d="M12 4.2v1.4M19.8 12h-1.4M12 19.8v-1.4M4.2 12h1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="color:var(--text-muted)"/>
+      </svg>
+    </div>
+    <p class="eyebrow">GDI Pharma, S.A. · Mantenimiento</p>
+    <h2>Plan de Calibración</h2>
+    <p class="login-sub">Acceso restringido. Ingresa tus credenciales.</p>
+    <div class="field">
+      <label for="loginUser">Usuario</label>
+      <input type="text" id="loginUser" name="username" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="loginPass">Contraseña</label>
+      <input type="password" id="loginPass" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn">Ingresar</button>
+    <p class="login-error" id="loginError">Usuario o contraseña incorrectos.</p>
+  </form>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none;">
 
   <header class="top">
     <div class="brand">
@@ -278,6 +325,42 @@
 <script src="data.js"></script>
 <script>
 (function(){
+  var USUARIO = 'mantenimiento';
+  var CLAVE = 'GDI-Calib2026';
+  var AUTH_KEY = 'pc_auth_v1';
+
+  var gate = document.getElementById('loginGate');
+  var wrap = document.getElementById('appWrap');
+
+  function unlock(){
+    gate.style.display = 'none';
+    wrap.style.display = '';
+  }
+
+  if(localStorage.getItem(AUTH_KEY) === '1'){
+    unlock();
+  } else {
+    document.getElementById('loginUser').focus();
+  }
+
+  document.getElementById('loginForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var u = document.getElementById('loginUser').value.trim();
+    var p = document.getElementById('loginPass').value;
+    if(u === USUARIO && p === CLAVE){
+      localStorage.setItem(AUTH_KEY, '1');
+      document.getElementById('loginError').style.display = 'none';
+      unlock();
+    } else {
+      document.getElementById('loginError').style.display = 'block';
+      document.getElementById('loginPass').value = '';
+      document.getElementById('loginPass').focus();
+    }
+  });
+})();
+</script>
+<script>
+(function(){
   var DATA = window.EQUIPOS || [];
 
   var ESTADO_LABEL = {
@@ -306,7 +389,10 @@
   function fmtDate(iso){
     if(!iso) return '<span class="sub">—</span>';
     var d = new Date(iso+'T00:00:00');
-    return '<span class="mono">'+d.toLocaleDateString('es-PA', {day:'2-digit', month:'short', year:'numeric'})+'</span>';
+    var s = d.toLocaleDateString('es-PA', {month:'short', year:'numeric'});
+    s = s.replace('.', '');
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+    return '<span class="mono">'+s+'</span>';
   }
 
   function critClass(c){
