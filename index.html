@@ -185,6 +185,47 @@
 
   .empty{padding:56px 20px;text-align:center;color:var(--text-muted);}
 
+  .group{border-bottom:1px solid var(--border);}
+  .group:last-child{border-bottom:none;}
+  .group-header{
+    display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;user-select:none;
+  }
+  .group-header:hover{background:var(--surface-2);}
+  .group-chevron{
+    width:16px;height:16px;flex-shrink:0;color:var(--text-muted);
+    transition:transform .15s ease;
+  }
+  .group.open .group-chevron{transform:rotate(90deg);}
+  .group-name{font-weight:600;font-size:14px;}
+  .group-count{
+    font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+    padding:1px 8px;flex-shrink:0;
+  }
+  .group-chips{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;}
+  .chip{
+    font-family:var(--font-mono);font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:999px;
+    border:1px solid transparent;white-space:nowrap;
+  }
+  .chip.vigente{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-border);}
+  .chip.proximo{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-border);}
+  .chip.vencido{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border);}
+  .chip.no_calibrado{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border);}
+  .chip.no_aplica{background:var(--muted-bg);color:var(--muted);border-color:var(--muted-border);}
+  .chip.sin_fecha{background:var(--info-bg);color:var(--info);border-color:var(--info-border);}
+  .group-body{overflow-x:auto;}
+  .group-body table{border-collapse:collapse;width:100%;min-width:1150px;font-size:13px;}
+  .group-body thead th{
+    position:sticky;top:0;background:var(--surface-2);text-align:left;
+    padding:8px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--text-muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;
+    font-weight:600;
+  }
+  .group-body thead th:hover{color:var(--text);}
+  .group-body tbody td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  .group-body tbody tr:last-child td{border-bottom:none;}
+  .group-body tbody tr:hover{background:var(--surface-2);}
+
   footer{margin-top:24px;color:var(--text-muted);font-size:12px;text-align:center;font-family:var(--font-mono);}
 
   @media (prefers-reduced-motion: reduce){
@@ -293,33 +334,17 @@
           <option value="no_aplica">No aplica</option>
         </select>
       </div>
+      <button class="btn secondary" id="expandBtn">Expandir todo</button>
+      <button class="btn secondary" id="collapseBtn">Colapsar todo</button>
       <button class="btn secondary" id="clearBtn">Limpiar filtros</button>
       <span class="result-count" id="resultCount"></span>
     </div>
 
-    <div class="table-scroll">
-      <table id="tbl">
-        <thead>
-          <tr>
-            <th data-key="id">ID</th>
-            <th data-key="nombre">Equipo</th>
-            <th data-key="area">Área / Ubicación</th>
-            <th data-key="criticidad">Criticidad</th>
-            <th data-key="clasificacion">Clasificación</th>
-            <th data-key="fechaPreventiva">Próx. calibración preventiva</th>
-            <th data-key="fechaReal">Próx. calibración real</th>
-            <th data-key="estado">Estado</th>
-            <th data-key="proveedor">Proveedor</th>
-            <th data-key="certificado">Certificado</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-      <div class="empty" id="emptyMsg" style="display:none;">No se encontraron equipos con estos filtros.</div>
-    </div>
+    <div id="groupsContainer"></div>
+    <div class="empty" id="emptyMsg" style="display:none;">No se encontraron equipos con estos filtros.</div>
   </div>
 
-  <footer>318 registros · Corte de referencia: 25 ago 2026 · GDI Pharma, S.A. — Mantenimiento</footer>
+  <footer>101 categorías de equipos · Corte de referencia: 25 ago 2026 · GDI Pharma, S.A. — Mantenimiento</footer>
 </div>
 
 <script src="data.js"></script>
@@ -399,7 +424,8 @@
     return (c||'').toUpperCase().indexOf('NO') === 0 ? 'nocritico' : 'critico';
   }
 
-  var state = { q:'', area:'', crit:'', clas:'', estado:'', sortKey:'nombre', sortDir:1 };
+  var state = { q:'', area:'', crit:'', clas:'', estado:'', sortKey:'marca', sortDir:1 };
+  var manualState = {};
 
   function computeStats(list){
     var counts = { total:list.length, vigente:0, proximo:0, vencido:0, no_calibrado:0, no_aplica:0 };
@@ -433,16 +459,19 @@
     });
   }
 
+  function normAccents(s){
+    return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  }
+
   function applyFilters(){
-    var q = state.q.trim().toLowerCase();
+    var q = normAccents(state.q.trim());
     return DATA.filter(function(d){
       if(state.area && d.area !== state.area) return false;
       if(state.crit && d.criticidad !== state.crit) return false;
       if(state.clas && d.clasificacion !== state.clas) return false;
       if(state.estado && d.estado !== state.estado) return false;
       if(q){
-        var hay = [d.id, d.nombre, d.marca, d.modelo, d.serie, d.ubicacion, d.proveedor]
-          .join(' ').toLowerCase();
+        var hay = normAccents([d.id, d.grupo, d.nombre, d.marca, d.modelo, d.serie, d.ubicacion, d.proveedor].join(' '));
         if(hay.indexOf(q) === -1) return false;
       }
       return true;
@@ -461,30 +490,87 @@
     });
   }
 
-  function renderTable(list){
-    var tbody = document.getElementById('tbody');
+  var COLS = [
+    {key:'id', label:'ID'},
+    {key:'marca', label:'Marca / Modelo'},
+    {key:'serie', label:'Serie'},
+    {key:'area', label:'Área / Ubicación'},
+    {key:'criticidad', label:'Criticidad'},
+    {key:'clasificacion', label:'Clasificación'},
+    {key:'fechaPreventiva', label:'Próx. preventiva'},
+    {key:'fechaReal', label:'Próx. real'},
+    {key:'estado', label:'Estado'},
+    {key:'proveedor', label:'Proveedor'},
+    {key:'certificado', label:'Certificado'}
+  ];
+  var CHIP_ORDER = ['vencido','proximo','no_calibrado','sin_fecha','vigente','no_aplica'];
+
+  function groupBy(list){
+    var map = {};
+    var order = [];
+    list.forEach(function(d){
+      if(!map[d.grupo]){ map[d.grupo] = []; order.push(d.grupo); }
+      map[d.grupo].push(d);
+    });
+    order.sort(function(a,b){ return a.localeCompare(b,'es'); });
+    return order.map(function(name){ return {name:name, items:map[name]}; });
+  }
+
+  function sortHeaderRow(){
+    return '<tr>' + COLS.map(function(c){
+      var arrow = state.sortKey===c.key ? (state.sortDir===1?' ▲':' ▼') : '';
+      return '<th data-key="'+c.key+'">'+c.label+arrow+'</th>';
+    }).join('') + '</tr>';
+  }
+
+  function rowHtml(d){
+    return '<tr>'
+      + '<td class="id-cell">'+d.id+'</td>'
+      + '<td><div class="name-cell">'+esc(d.marca)+'</div><div class="sub">'+esc(d.modelo)+'</div></td>'
+      + '<td class="mono">'+esc(d.serie||'—')+'</td>'
+      + '<td>'+esc(d.area)+'<div class="sub">'+esc(d.ubicacion)+'</div></td>'
+      + '<td><span class="crit '+critClass(d.criticidad)+'">'+esc(d.criticidad||'—')+'</span></td>'
+      + '<td>'+esc(d.clasificacion)+'</td>'
+      + '<td>'+fmtDate(d.fechaPreventiva)+'</td>'
+      + '<td>'+fmtDate(d.fechaReal)+'</td>'
+      + '<td><span class="badge '+d.estado+'">'+ESTADO_LABEL[d.estado]+'</span></td>'
+      + '<td>'+esc(d.proveedor)+'</td>'
+      + '<td class="mono">'+esc(d.certificado||'—')+'</td>'
+      + '</tr>';
+  }
+
+  function groupChips(items){
+    var counts = {};
+    items.forEach(function(d){ counts[d.estado] = (counts[d.estado]||0)+1; });
+    return CHIP_ORDER.filter(function(k){ return counts[k]; }).map(function(k){
+      return '<span class="chip '+k+'">'+counts[k]+' '+ESTADO_LABEL[k]+'</span>';
+    }).join('');
+  }
+
+  function renderGroups(list, autoExpand){
+    var container = document.getElementById('groupsContainer');
     var empty = document.getElementById('emptyMsg');
     if(list.length === 0){
-      tbody.innerHTML = '';
+      container.innerHTML = '';
       empty.style.display = 'block';
       return;
     }
     empty.style.display = 'none';
-    var rows = list.map(function(d){
-      return '<tr>'
-        + '<td class="id-cell">'+d.id+'</td>'
-        + '<td><div class="name-cell">'+esc(d.nombre)+'</div><div class="sub">'+esc(d.marca)+' '+esc(d.modelo)+'</div></td>'
-        + '<td>'+esc(d.area)+'<div class="sub">'+esc(d.ubicacion)+'</div></td>'
-        + '<td><span class="crit '+critClass(d.criticidad)+'">'+esc(d.criticidad||'—')+'</span></td>'
-        + '<td>'+esc(d.clasificacion)+'</td>'
-        + '<td>'+fmtDate(d.fechaPreventiva)+'</td>'
-        + '<td>'+fmtDate(d.fechaReal)+'</td>'
-        + '<td><span class="badge '+d.estado+'">'+ESTADO_LABEL[d.estado]+'</span></td>'
-        + '<td>'+esc(d.proveedor)+'</td>'
-        + '<td class="mono">'+esc(d.certificado||'—')+'</td>'
-        + '</tr>';
+    var groups = groupBy(list);
+    var html = groups.map(function(g){
+      var isOpen = manualState.hasOwnProperty(g.name) ? manualState[g.name] : autoExpand;
+      var items = sortList(g.items);
+      return '<div class="group'+(isOpen?' open':'')+'" data-group="'+esc(g.name)+'">'
+        + '<div class="group-header" data-toggle="'+esc(g.name)+'">'
+          + '<svg class="group-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+          + '<span class="group-name">'+esc(g.name)+'</span>'
+          + '<span class="group-count">'+g.items.length+'</span>'
+          + '<span class="group-chips">'+groupChips(g.items)+'</span>'
+        + '</div>'
+        + (isOpen ? '<div class="group-body"><table><thead>'+sortHeaderRow()+'</thead><tbody>'+items.map(rowHtml).join('')+'</tbody></table></div>' : '')
+        + '</div>';
     });
-    tbody.innerHTML = rows.join('');
+    container.innerHTML = html.join('');
   }
 
   function esc(s){
@@ -493,10 +579,14 @@
   }
 
   function render(){
-    var filtered = sortList(applyFilters());
+    var filtered = applyFilters();
+    var autoExpand = !!(state.q.trim() || state.area || state.crit || state.clas || state.estado);
     renderStats();
-    renderTable(filtered);
-    document.getElementById('resultCount').textContent = filtered.length + ' de ' + DATA.length + ' equipos';
+    renderGroups(filtered, autoExpand);
+    var groupCount = {};
+    filtered.forEach(function(d){ groupCount[d.grupo] = true; });
+    document.getElementById('resultCount').textContent =
+      filtered.length + ' de ' + DATA.length + ' equipos · ' + Object.keys(groupCount).length + ' categorías';
   }
 
   document.getElementById('q').addEventListener('input', function(e){ state.q = e.target.value; render(); });
@@ -506,6 +596,7 @@
   document.getElementById('fEstado').addEventListener('change', function(e){ state.estado = e.target.value; render(); });
   document.getElementById('clearBtn').addEventListener('click', function(){
     state = { q:'', area:'', crit:'', clas:'', estado:'', sortKey:state.sortKey, sortDir:state.sortDir };
+    manualState = {};
     document.getElementById('q').value = '';
     document.getElementById('fArea').value = '';
     document.getElementById('fCrit').value = '';
@@ -514,13 +605,31 @@
     render();
   });
 
-  document.querySelectorAll('thead th').forEach(function(th){
-    th.addEventListener('click', function(){
+  document.getElementById('expandBtn').addEventListener('click', function(){
+    groupBy(applyFilters()).forEach(function(g){ manualState[g.name] = true; });
+    render();
+  });
+  document.getElementById('collapseBtn').addEventListener('click', function(){
+    groupBy(applyFilters()).forEach(function(g){ manualState[g.name] = false; });
+    render();
+  });
+
+  document.getElementById('groupsContainer').addEventListener('click', function(e){
+    var header = e.target.closest('[data-toggle]');
+    if(header){
+      var name = header.getAttribute('data-toggle');
+      var open = header.parentElement.classList.contains('open');
+      manualState[name] = !open;
+      render();
+      return;
+    }
+    var th = e.target.closest('th[data-key]');
+    if(th){
       var key = th.getAttribute('data-key');
       if(state.sortKey === key){ state.sortDir *= -1; }
       else { state.sortKey = key; state.sortDir = 1; }
       render();
-    });
+    }
   });
 
   document.getElementById('updatedLabel').textContent =
