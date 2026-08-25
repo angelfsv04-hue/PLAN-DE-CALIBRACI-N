@@ -352,7 +352,6 @@
 (function(){
   var USUARIO = 'Angel S_GDI Pharma';
   var CLAVE = 'GDIcalibraciones2026';
-  var AUTH_KEY = 'pc_auth_v1';
 
   var gate = document.getElementById('loginGate');
   var wrap = document.getElementById('appWrap');
@@ -362,18 +361,13 @@
     wrap.style.display = '';
   }
 
-  if(localStorage.getItem(AUTH_KEY) === '1'){
-    unlock();
-  } else {
-    document.getElementById('loginUser').focus();
-  }
+  document.getElementById('loginUser').focus();
 
   document.getElementById('loginForm').addEventListener('submit', function(e){
     e.preventDefault();
     var u = document.getElementById('loginUser').value.trim();
     var p = document.getElementById('loginPass').value;
     if(u === USUARIO && p === CLAVE){
-      localStorage.setItem(AUTH_KEY, '1');
       document.getElementById('loginError').style.display = 'none';
       unlock();
     } else {
