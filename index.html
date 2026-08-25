@@ -100,6 +100,40 @@
     line-height:1.6;
   }
 
+  .kpi-row{
+    display:grid;grid-template-columns:1.3fr 1fr 1fr 1.4fr;gap:12px;margin-bottom:14px;
+    align-items:stretch;
+  }
+  @media (max-width:1100px){.kpi-row{grid-template-columns:1fr 1fr;}}
+  @media (max-width:640px){.kpi-row{grid-template-columns:1fr;}}
+  .kpi-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;
+  }
+  .kpi-label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
+  .kpi-value{font-family:var(--font-mono);font-size:32px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1;}
+  .kpi-sub{font-size:12px;color:var(--text-muted);}
+  .kpi-meter-track{
+    height:8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);
+    overflow:hidden;margin-top:2px;
+  }
+  .kpi-meter-fill{height:100%;border-radius:999px;transition:width .2s ease;}
+  .kpi-good .kpi-value{color:var(--ok);} .kpi-good .kpi-meter-fill{background:var(--ok);}
+  .kpi-warn .kpi-value{color:var(--warn);} .kpi-warn .kpi-meter-fill{background:var(--warn);}
+  .kpi-bad .kpi-value{color:var(--danger);} .kpi-bad .kpi-meter-fill{background:var(--danger);}
+
+  .kpi-rank-title{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
+  .kpi-rank-list{display:flex;flex-direction:column;gap:7px;}
+  .kpi-rank-row{
+    display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 4px;border-radius:6px;
+    background:none;border:none;text-align:left;font-family:inherit;color:inherit;
+  }
+  .kpi-rank-row:hover{background:var(--surface-2);}
+  .kpi-rank-name{font-size:12px;flex:0 0 auto;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .kpi-rank-bar-track{flex:1 1 auto;height:7px;border-radius:999px;background:var(--surface-2);overflow:hidden;}
+  .kpi-rank-bar-fill{height:100%;border-radius:999px;background:var(--danger);}
+  .kpi-rank-count{font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);flex:0 0 auto;font-variant-numeric:tabular-nums;min-width:18px;text-align:right;}
+
   .stats{
     display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:22px;
   }
@@ -302,6 +336,8 @@
     <div class="updated" id="updatedLabel"></div>
   </header>
 
+  <div class="kpi-row" id="kpiRow"></div>
+
   <div class="stats" id="stats"></div>
 
   <div class="panel">
@@ -435,6 +471,72 @@
     {key:'no_calibrado', label:'No calibrados'},
     {key:'no_aplica', label:'No aplica'}
   ];
+
+  function severityClass(pct, goodMin, warnMin){
+    if(pct >= goodMin) return 'kpi-good';
+    if(pct >= warnMin) return 'kpi-warn';
+    return 'kpi-bad';
+  }
+
+  function renderKpis(){
+    var el = document.getElementById('kpiRow');
+    var aplicable = DATA.filter(function(d){ return d.estado !== 'no_aplica'; });
+    var n = aplicable.length || 1;
+
+    var vigentes = aplicable.filter(function(d){ return d.estado==='vigente'; }).length;
+    var cumplPct = Math.round((vigentes/n)*1000)/10;
+    var cumplClass = severityClass(cumplPct, 85, 60);
+
+    var riesgo = aplicable.filter(function(d){
+      return d.criticidad==='CRÍTICO' && (d.estado==='vencido' || d.estado==='proximo' || d.estado==='no_calibrado');
+    }).length;
+    var riesgoClass = riesgo === 0 ? 'kpi-good' : (riesgo <= 10 ? 'kpi-warn' : 'kpi-bad');
+
+    var conFecha = aplicable.filter(function(d){ return d.fechaReal; }).length;
+    var covPct = Math.round((conFecha/n)*1000)/10;
+    var covClass = severityClass(covPct, 90, 70);
+
+    var pendCount = {};
+    aplicable.forEach(function(d){
+      if(d.estado==='vencido' || d.estado==='proximo' || d.estado==='no_calibrado'){
+        pendCount[d.grupo] = (pendCount[d.grupo]||0) + 1;
+      }
+    });
+    var ranked = Object.keys(pendCount).map(function(k){ return {name:k, count:pendCount[k]}; })
+      .sort(function(a,b){ return b.count - a.count; }).slice(0,5);
+    var maxCount = ranked.length ? ranked[0].count : 1;
+
+    el.innerHTML =
+      '<div class="kpi-card '+cumplClass+'">'
+        + '<span class="kpi-label">Cumplimiento de calibración</span>'
+        + '<span class="kpi-value">'+cumplPct+'%</span>'
+        + '<div class="kpi-meter-track"><div class="kpi-meter-fill" style="width:'+cumplPct+'%"></div></div>'
+        + '<span class="kpi-sub">'+vigentes+' de '+n+' equipos que requieren calibración están vigentes</span>'
+      + '</div>'
+      + '<div class="kpi-card '+riesgoClass+'">'
+        + '<span class="kpi-label">Críticos en riesgo</span>'
+        + '<span class="kpi-value">'+riesgo+'</span>'
+        + '<span class="kpi-sub">Equipos CRÍTICOS vencidos, próximos o sin calibrar</span>'
+      + '</div>'
+      + '<div class="kpi-card '+covClass+'">'
+        + '<span class="kpi-label">Cobertura de datos</span>'
+        + '<span class="kpi-value">'+covPct+'%</span>'
+        + '<span class="kpi-sub">'+conFecha+' de '+n+' equipos con fecha de calibración registrada</span>'
+      + '</div>'
+      + '<div class="kpi-card">'
+        + '<span class="kpi-rank-title">Categorías con más pendientes</span>'
+        + '<div class="kpi-rank-list">'
+        + (ranked.length ? ranked.map(function(r){
+            var w = Math.round((r.count/maxCount)*100);
+            return '<button type="button" class="kpi-rank-row" data-jump="'+esc(r.name)+'">'
+              + '<span class="kpi-rank-name">'+esc(r.name)+'</span>'
+              + '<span class="kpi-rank-bar-track"><span class="kpi-rank-bar-fill" style="width:'+w+'%"></span></span>'
+              + '<span class="kpi-rank-count">'+r.count+'</span>'
+              + '</button>';
+          }).join('') : '<span class="kpi-sub">Sin pendientes — todo al día.</span>')
+        + '</div>'
+      + '</div>';
+  }
 
   function renderStats(){
     var counts = computeStats(DATA);
@@ -575,6 +677,7 @@
   function render(){
     var filtered = applyFilters();
     var autoExpand = !!(state.q.trim() || state.area || state.crit || state.clas || state.estado);
+    renderKpis();
     renderStats();
     renderGroups(filtered, autoExpand);
     var groupCount = {};
@@ -597,6 +700,18 @@
     document.getElementById('fClas').value = '';
     document.getElementById('fEstado').value = '';
     render();
+  });
+
+  document.getElementById('kpiRow').addEventListener('click', function(e){
+    var jump = e.target.closest('[data-jump]');
+    if(!jump) return;
+    var name = jump.getAttribute('data-jump');
+    state.q = name;
+    document.getElementById('q').value = name;
+    manualState[name] = true;
+    render();
+    var target = document.querySelector('.group[data-group="'+CSS.escape(name)+'"]');
+    if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
   });
 
   document.getElementById('expandBtn').addEventListener('click', function(){
